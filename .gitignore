@@ -1,2 +1,5 @@
 .pio
 .DS_Store
+.cache
+.venv
+.clangd
