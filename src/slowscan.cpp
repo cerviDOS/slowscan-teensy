@@ -13,6 +13,7 @@ static const int BUFFER_HALF = BUFFER_SIZE / 2;
 static const int TRIM_OFFSET= BUFFER_SIZE / 4;
 FrequencyDemodulator freq;
 
+static const int SCANLINE_WIDTH = SSTV::SCANLINE_WIDTH;
 SSTV sstv;
 
 void setup()
@@ -28,6 +29,8 @@ void loop()
     static int wf_index = 0;
     static double waveform_real[BUFFER_SIZE];
     static double frequencies[BUFFER_SIZE-1];
+
+    static SSTV::Pixel scanline_data[320];
 
     if (queue.available()) {
         int16_t* buffer = queue.readBuffer();
@@ -46,8 +49,28 @@ void loop()
                 //Serial.println(frequencies[index+TRIM_OFFSET]);
                 trimmed_frequencies[index] = frequencies[index+TRIM_OFFSET];
             }
-            
-            sstv.process_frequencies(trimmed_frequencies, BUFFER_HALF);
+
+            bool scanline_ready = sstv.process_frequencies(trimmed_frequencies,
+                                         BUFFER_HALF);
+
+            if (scanline_ready) {
+                Serial.print(millis());
+                Serial.print(":");
+                Serial.println("SCANLINE DONE");
+
+                /*
+                sstv.retrieve_scanline(scanline_data);
+                for (int i = 0; i < SCANLINE_WIDTH; i++) {
+                    SSTV::Pixel pixel = scanline_data[i];
+                    Serial.print(pixel.red);
+                    Serial.print(",");
+                    Serial.print(pixel.green);
+                    Serial.print(",");
+                    Serial.println(pixel.blue);
+                }
+                */
+    
+            }
 
             // Move latter half of waveform data to beginning.
             // 50% overlap means no data is lost since already processed frequencies
