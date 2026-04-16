@@ -53,37 +53,6 @@ while True:
                 y = 0
             else:
                 y += 1
-        cv2.imshow('SSTV', img)
 
+    cv2.imshow('SSTV', img)
     cv2.waitKey(1)
-
-
-
-
-
-'''
-data = pd.read_csv(sys.argv[1],sep=',',header=None)
-data = pd.DataFrame(data)
-
-red_channel = data[0]
-green_channel = data[1]
-blue_channel = data[2]
-
-image = Image.new(mode='RGB', size=(320, 256), color=(0,0,0))
-pixels: Image.PixelAccess = image.load()
-
-x = 0
-y = 0
-
-for pixel in zip(red_channel, green_channel, blue_channel):
-    pixels[x,y] = pixel
-
-    x += 1
-    if x == 320:
-        x = 0
-        if y == 255:
-            break
-        else:
-            y += 1
-'''
-
