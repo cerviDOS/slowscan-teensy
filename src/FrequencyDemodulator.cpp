@@ -48,7 +48,23 @@ double FrequencyDemodulator::recover_phase(double I, double Q)
     return atan2(I, Q);
 }
 
-void FrequencyDemodulator::inst_freq(const double waveform_data[BUFFER_SIZE], double frequency_data[BUFFER_SIZE-1])
+double FrequencyDemodulator::instantaneous_frequency(double real1, double imag1,
+                                                     double real2, double imag2)
+{
+    double phase1 =
+        (atan2(imag1, real1) / M_PI) * INT16_MAX;
+
+    double phase2 =
+        (atan2(imag2, real2) / M_PI) * INT16_MAX;
+
+    int16_t phase_diff_int16 = (int) phase2 - phase1;
+
+    double phase_diff = phase_diff_int16 / (double) INT16_MAX;
+
+    return (phase_diff / 2) * m_sample_rate;
+}
+
+void FrequencyDemodulator::frequencies(const double waveform_data[BUFFER_SIZE], double frequency_data[BUFFER_SIZE-1])
 {
     double real[BUFFER_SIZE];
     double imag[BUFFER_SIZE];
@@ -60,6 +76,8 @@ void FrequencyDemodulator::inst_freq(const double waveform_data[BUFFER_SIZE], do
     analytic_signal(real, imag);
 
     for (int index = 0; index < BUFFER_SIZE-1; index++) {
+        /*
+        // TODO: encapsulate wrapping method in its own function
         double phase1 =
             (atan2(imag[index], real[index]) / M_PI) * INT16_MAX;
 
@@ -73,5 +91,10 @@ void FrequencyDemodulator::inst_freq(const double waveform_data[BUFFER_SIZE], do
         double frequency = (phase_diff / 2) * m_sample_rate;
 
         frequency_data[index] = frequency;
+        */
+
+        frequency_data[index] = 
+            instantaneous_frequency(real[index], imag[index],
+                                    real[index+1], imag[index+1]);
     }
 }
