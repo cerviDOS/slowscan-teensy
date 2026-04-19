@@ -43,6 +43,8 @@ void loop()
         wf_index++;
     }
 
+    queue.freeBuffer();
+
     if (wf_index != BUFFER_SIZE) {
         return;
     }
@@ -55,7 +57,7 @@ void loop()
         for (int index = 0; index < BUFFER_HALF; index++) {
             trimmed_frequencies[index] = frequencies[index+TRIM_OFFSET];
         }
-
+        
         bool scanline_ready = sstv.process_frequencies(trimmed_frequencies,
                                                        BUFFER_HALF);
 
@@ -66,6 +68,7 @@ void loop()
             //Serial.println("SCANLINE DONE");
 
             sstv.retrieve_scanline(scanline_data);
+
             for (int i = 0; i < SCANLINE_WIDTH; i++) {
                 SSTV::Pixel pixel = scanline_data[i];
                 Serial.print(pixel.red);
@@ -74,8 +77,6 @@ void loop()
                 Serial.print(",");
                 Serial.println(pixel.blue);
             }
-
-
         }
 
         // Move latter half of waveform data to beginning.
@@ -88,5 +89,4 @@ void loop()
         wf_index = BUFFER_HALF;
     }
 
-    queue.freeBuffer();
 }

@@ -201,9 +201,10 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 
 
                     // Swap double buffers
+
                     Pixel* temp = m_completed_scanline;
                     m_completed_scanline = m_scanline_in_progress;
-                    m_completed_scanline = temp;
+                    m_scanline_in_progress = temp;
 
                     m_new_scanline_ready = true;
 
