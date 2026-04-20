@@ -6,8 +6,6 @@ public:
     static const uint32_t MARTIN_M1_NUM_SCANLINES = 256;
     static const uint32_t MARTIN_M1_SCANLINE_WIDTH = 320;
 
-
-
 public:
     typedef struct {
         uint8_t red;
@@ -45,33 +43,29 @@ private:
     bool validate_hsync_duration(uint64_t start, uint64_t end);
     uint16_t detect_hsync(double frequency_data[], uint16_t frequency_count, uint16_t start_index);
     uint16_t decode_color_scan(double frequency_data[], uint16_t frequency_count, uint16_t start_index);
+    uint16_t wait(double frequency_data[], uint16_t frequency_count, uint16_t start_index);
 
     uint32_t m_sample_rate;
-
     uint32_t m_num_scanlines_processed;
 
     // Need a timing mechanism, keeping track of duration between inputted samples
-    uint64_t m_sample_clock; // keep track of number of samples processed?
+    uint64_t m_sample_clock; // keep track of number of samples processed
     uint64_t m_last_hsync_start;
     uint64_t m_last_hsync_end;
 
-    enum State {HSYNC_DETECTION, SCANLINE_DECODING};
+    uint64_t m_color_scan_start;
+
+    enum State {HSYNC_DETECTION, SCANLINE_DECODING, WAITING};
     State m_current_state;
 
-    // NOTE: maybe adding SAMPLES_PER_x as class members
-    // is the way to go
-    // e.g. SAMPLES_PER_PIXEL
+    uint16_t m_num_samples_to_wait;
+    State m_state_after_wait;
+    // TODO: encapsulate wait
+    void wait_samples(uint16_t num_samples, State state_after);
 
-    void swap_buffers();
 
     bool m_new_scanline_ready;
-
     Pixel* m_completed_scanline;
     Pixel* m_scanline_in_progress;
-
-    // Swap when scanline is completed;
-    // Pixel* temp = m_completed_scanline;
-    // m_completed_scanline = m_scanline_in_progress;
-    // m_scanline_in_progress = temp;
 };
 

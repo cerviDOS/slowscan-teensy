@@ -4,13 +4,17 @@
 
 // Mode timings in milliseconds
 
-// TODO: Also include ~30 millisecond pulse that occurs after VIS code
-// TODO: change millisecond timings here for sample counting
+// TODO:
+// - Include ~30 millisecond pulse that occurs after VIS code
+// - Change millisecond timings to sample timings
+// - Find what's causing scanlines to be occasionally
+// misaligned
 
 static const double MARTIN_M1_HSYNC_PULSE_MS = 4.862;
 static const double MARTIN_M1_HSYNC_PORCH_MS = 0.572;
 static const double MARTIN_M1_COLOR_SCAN_MS = 146.432;
-static const double MARTIN_M1_MS_PER_PIXEL = MARTIN_M1_COLOR_SCAN_MS / SSTV::MARTIN_M1_SCANLINE_WIDTH;
+static const double MARTIN_M1_COLOR_SEPARATOR_MS = 0.572;
+static const double MARTIN_M1_MS_PER_PIXEL = 0.4576;
 
 // Mode frequencies in Hz
 
@@ -21,7 +25,7 @@ static const uint32_t MARTIN_M1_COLOR_HIGH_HZ = 2300;
 // Tolerance
 
 static const uint32_t FREQUENCY_TOLERANCE = 50;
-static const double TIMING_TOLERANCE_MS = 0.25;
+static const double TIMING_TOLERANCE_MS = 0.5;
 
 namespace {
 
@@ -40,7 +44,9 @@ SSTV::SSTV(uint32_t sample_rate) :
     m_sample_clock(0),
     m_last_hsync_start(0),
     m_last_hsync_end(0),
+    m_color_scan_start(0),
     m_current_state(State::HSYNC_DETECTION),
+    m_num_samples_to_wait(0),
     m_new_scanline_ready(false),
     m_completed_scanline(new Pixel[MARTIN_M1_SCANLINE_WIDTH]),
     m_scanline_in_progress(new Pixel[MARTIN_M1_SCANLINE_WIDTH])
@@ -50,9 +56,13 @@ bool SSTV::validate_hsync_duration(uint64_t hsync_start, uint64_t hsync_end)
 {
     double pulse_duration_ms = ((hsync_end - hsync_start) / (double) m_sample_rate) * 1000;
 
-    return is_within_tolerance(pulse_duration_ms,
+    bool is_hsync = is_within_tolerance(pulse_duration_ms,
                                MARTIN_M1_HSYNC_PULSE_MS,
                                TIMING_TOLERANCE_MS);
+
+    //Serial.printf("hsync candidate duration: %f --- verdict: %d", pulse_duration_ms, is_hsync);
+
+    return is_hsync;
 }
 
 uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
@@ -60,10 +70,7 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
     static bool within_hsync_candidate = false;
 
     // Debug
-    //Serial.print("hsync scanning beginning at offset: ");
-    //Serial.print(start_index);
-    //Serial.print("/");
-    //Serial.println(frequency_count);
+    //Serial.printf("hsync scan beginning at offset:%d/%d", start_index, frequency_count);
 
     for (uint16_t index = start_index; index < frequency_count; index++) {
         double frequency = frequency_data[index];
@@ -88,12 +95,10 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
             if (validate_hsync_duration(m_last_hsync_start, m_last_hsync_end)) {
                 // Candidate is indeed an hsync, begin decoding scanline
                 m_current_state = SCANLINE_DECODING;
-                
+                m_color_scan_start = m_sample_clock;
+
                 // Debug
-                //Serial.print("hsync terminated at index: ");
-                //Serial.print(index);
-                //Serial.print("/");
-                //Serial.println(frequency_count);
+                // Serial.printf("hsync ended at index:%d/%d", index, frequency_count);
                 return index+1;
             }
         }
@@ -120,18 +125,12 @@ uint8_t SSTV::convert_frequency_to_intensity(double frequency)
     }
 }
 
-// BUG: Testing shows that 435 ms of samples are read instead of 439 - 441,
-//      likely a rounding error
-//
-// BUG: Occasionally "slips" and returns a bunch of garbage
-//      scanlines at once
 uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
 {
     enum ColorScanState { GREEN = 1, BLUE = 2, RED = 3 };
     static ColorScanState current_scan = GREEN;
 
-    static const uint16_t samples_per_pixel =
-        (MARTIN_M1_MS_PER_PIXEL / 1000) * m_sample_rate;
+    static const uint16_t samples_per_pixel = (MARTIN_M1_MS_PER_PIXEL / 1000) * m_sample_rate;
 
     // x position of the pixel whose color channel is currently being read
     static uint16_t current_pixel = 0;
@@ -139,23 +138,18 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
     static uint16_t samples_read = 0;
     static double frequency_sum = 0.0;
 
-
-    // NOTE: Currently assumes that the color scan starts immediately after
-    // the hsync ends. Likely the cause of the bug above.
-
     for (int index = start_index; index < frequency_count; index++) {
-        frequency_sum += frequency_data[index];
-        samples_read++;
         m_sample_clock++;
+        samples_read++;
 
-        // Stop early if the current pixel still
-        // has frequencies to be read.
+        frequency_sum += frequency_data[index];
+
+        // Stop early if the current pixel still has frequencies to be read.
         if (samples_read != samples_per_pixel) {
             continue;
         }
-
         // Translate frequencies to the pixel's color channel intensity.
-        double avg_frequecy = frequency_sum / samples_per_pixel;
+        double avg_frequecy = frequency_sum / samples_read;
 
         uint8_t color_intensity =
             convert_frequency_to_intensity(avg_frequecy);
@@ -183,6 +177,10 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
             // Color scan finished, move to next color channel
             // or return to hsync detection.
             current_pixel = 0;
+
+            //uint64_t now = m_sample_clock;
+            //Serial.printf("color scan finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+
             switch (current_scan) {
                 case GREEN:
                     current_scan = BLUE;
@@ -193,15 +191,9 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                 case RED:
 
                     // Debug
-                    //uint64_t now = m_sample_clock;
-
-                    ///Serial.print("scanline terminated after: ");
-                    //Serial.print(1000*(now - m_last_hsync_end)/m_sample_rate);
-                    //Serial.println("ms");
-
+                    //Serial.printf("scanline finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
 
                     // Swap double buffers
-
                     Pixel* temp = m_completed_scanline;
                     m_completed_scanline = m_scanline_in_progress;
                     m_scanline_in_progress = temp;
@@ -213,9 +205,37 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 
                     return index+1;
             }
+
+            // Current timing system introduces rounding errors, so
+            // wait until the next color scan should begin
+            uint32_t samples_per_scan = (MARTIN_M1_COLOR_SCAN_MS / 1000) * m_sample_rate;
+            uint32_t color_scan_duration = m_sample_clock - m_color_scan_start;
+
+            m_num_samples_to_wait = samples_per_scan - color_scan_duration;
+            m_color_scan_start = m_sample_clock + m_num_samples_to_wait;
+
+            m_current_state = WAITING;
+
+            return index+1;
         }
     }
 
+    return frequency_count;
+}
+
+uint16_t SSTV::wait(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
+{
+    static uint16_t samples_elapsed = 0;
+    for (int index = start_index; index < frequency_count; index++) {
+        samples_elapsed++;
+        if (samples_elapsed == m_num_samples_to_wait) {
+            samples_elapsed = 0;
+
+            m_current_state = SCANLINE_DECODING; //m_state_after_wait;
+
+            return index+1;
+        }
+    }
     return frequency_count;
 }
 
@@ -234,6 +254,8 @@ bool SSTV::process_frequencies(double frequency_data[], uint16_t frequency_count
             case SCANLINE_DECODING:
                 processing_fn = &SSTV::decode_color_scan;
                 break;
+            case WAITING:
+                processing_fn = &SSTV::wait;
         }
 
         leftover_index = (this->*processing_fn)(frequency_data, frequency_count, leftover_index);
@@ -248,7 +270,7 @@ void SSTV::retrieve_scanline(Pixel scanline_out[MARTIN_M1_SCANLINE_WIDTH])
         return;
     }
 
-    for (int index = 0; index < MARTIN_M1_SCANLINE_WIDTH; index++) {
+    for (uint16_t index = 0; index < MARTIN_M1_SCANLINE_WIDTH; index++) {
         scanline_out[index] = m_completed_scanline[index];
     }
 
