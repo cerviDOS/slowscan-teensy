@@ -25,11 +25,9 @@ while True:
     while io.poll(1):
         split = teensy_output.stdout.readline() \
             .decode() \
-            .replace('\r\n', '') \
+            .replace('\n', '') \
             .split(',', maxsplit=3)
 
-        print(split)
-        
         ignore_line = False
 
         for val in split:
@@ -40,11 +38,14 @@ while True:
         if ignore_line or len(split) != 3:
             continue
 
+        
+        print(split)
+
         red, green, blue = tuple(map(int, split))
 
-        img[y, x, 0] = red
+        img[y, x, 0] = blue
         img[y, x, 1] = green
-        img[y, x, 2] = blue
+        img[y, x, 2] = red
 
         x += 1
         if x == 320:

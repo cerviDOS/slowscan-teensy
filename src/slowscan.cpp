@@ -62,20 +62,14 @@ void loop()
                                                        BUFFER_HALF);
 
         if (scanline_ready) {
-            // Debug
-            //Serial.print(millis());
-            //Serial.print(":");
-            //Serial.println("SCANLINE DONE");
-
             sstv.retrieve_scanline(scanline_data);
 
             for (int i = 0; i < SCANLINE_WIDTH; i++) {
+
                 SSTV::Pixel pixel = scanline_data[i];
-                Serial.print(pixel.red);
-                Serial.print(",");
-                Serial.print(pixel.green);
-                Serial.print(",");
-                Serial.println(pixel.blue);
+                Serial.printf("%d,%d,%d\n",
+                              pixel.red, pixel.green, pixel.blue);
+
             }
         }
 
