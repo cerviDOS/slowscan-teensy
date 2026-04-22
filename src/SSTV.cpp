@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "sstv.h"
+#include "debug.h"
 
 // Mode timings in milliseconds
 
@@ -57,10 +58,12 @@ bool SSTV::validate_hsync_duration(uint64_t hsync_start, uint64_t hsync_end)
     double pulse_duration_ms = ((hsync_end - hsync_start) / (double) m_sample_rate) * 1000;
 
     bool is_hsync = is_within_tolerance(pulse_duration_ms,
-                               MARTIN_M1_HSYNC_PULSE_MS,
-                               TIMING_TOLERANCE_MS);
+                                        MARTIN_M1_HSYNC_PULSE_MS,
+                                        TIMING_TOLERANCE_MS);
 
-    //Serial.printf("hsync candidate duration: %f --- verdict: %d", pulse_duration_ms, is_hsync);
+#if DEBUG_DECODER_STATE
+    Serial.printf("hsync candidate duration: %f --- verdict: %d", pulse_duration_ms, is_hsync);
+#endif
 
     return is_hsync;
 }
@@ -69,8 +72,9 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
 {
     static bool within_hsync_candidate = false;
 
-    // Debug
-    //Serial.printf("hsync scan beginning at offset:%d/%d", start_index, frequency_count);
+#if DEBUG_DECODER_STATE
+    Serial.printf("hsync scan beginning at offset:%d/%d", start_index, frequency_count);
+#endif
 
     for (uint16_t index = start_index; index < frequency_count; index++) {
         double frequency = frequency_data[index];
@@ -174,13 +178,15 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 
         if (current_pixel == 320) {
 
-            // Color scan finished, move to next color channel
-            // or return to hsync detection.
+#if DEBUG_DECODER_STATE
+            uint64_t now = m_sample_clock;
+            Serial.printf("color scan finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+#endif
+
             current_pixel = 0;
 
-            //uint64_t now = m_sample_clock;
-            //Serial.printf("color scan finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
-
+            // Color scan finished, move to next color channel
+            // or return to hsync detection.
             switch (current_scan) {
                 case GREEN:
                     current_scan = BLUE;
@@ -190,20 +196,20 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                     break;
                 case RED:
 
-                    // Debug
-                    //Serial.printf("scanline finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+#if DEBUG_DECODER_STATE
+                Serial.printf("scanline finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+#endif
+                // Swap double buffers
+                Pixel* temp = m_completed_scanline;
+                m_completed_scanline = m_scanline_in_progress;
+                m_scanline_in_progress = temp;
 
-                    // Swap double buffers
-                    Pixel* temp = m_completed_scanline;
-                    m_completed_scanline = m_scanline_in_progress;
-                    m_scanline_in_progress = temp;
+                m_new_scanline_ready = true;
 
-                    m_new_scanline_ready = true;
+                m_current_state = HSYNC_DETECTION;
+                current_scan = GREEN;
 
-                    m_current_state = HSYNC_DETECTION;
-                    current_scan = GREEN;
-
-                    return index+1;
+                return index+1;
             }
 
             // Current timing system introduces rounding errors, so
@@ -231,7 +237,10 @@ uint16_t SSTV::wait(double frequency_data[], uint16_t frequency_count, uint16_t 
         if (samples_elapsed == m_num_samples_to_wait) {
             samples_elapsed = 0;
 
-            m_current_state = SCANLINE_DECODING; //m_state_after_wait;
+            // Change to m_state_after_wait at some point.
+            // More book keeping but should be useful for decoding
+            // other modes.
+            m_current_state = SCANLINE_DECODING;
 
             return index+1;
         }
