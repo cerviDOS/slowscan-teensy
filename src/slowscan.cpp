@@ -9,19 +9,25 @@
 
 // Audio Capture
 
-// Number of samples in the buffer returned
-// by the AudioRecordQueue
-static const int PACKET_SIZE = 128;
 
-AudioRecordQueue queue;
 
 // TODO: use env variable to switch this
 // e.g. ifdef MIDI_AUDIO_SERIAL use usb, otherwise use analog in
 //AudioInputAnalog analog_in;
 //AudioConnection analog2queue(analog_in, queue);
 
-AudioInputUSB usb_in;
-AudioConnection usb2queue(usb_in, queue);
+// Number of samples in the buffer returned
+// by the AudioRecordQueue
+static const int PACKET_SIZE = 128;
+AudioRecordQueue queue;
+//AudioInputUSB usb_in;
+//AudioConnection usb2queue(usb_in, queue);
+
+AudioInputAnalog analog_in(A2);
+AudioFilterBiquad filter;
+
+AudioConnection analog2filter(analog_in, filter);
+AudioConnection filter2queue(filter, queue);
 
 // Frequency Demodulation
 static const int BUFFER_SIZE = FrequencyDemodulator::BUFFER_SIZE;
@@ -46,8 +52,11 @@ static const int TFT_WIDTH = 320;
 Adafruit_ILI9341 display(TFT_CS, TFT_DC, TFT_COPI, TFT_SCK);
 
 // Util Functions
+
 uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue);
 
+// bool read_packet
+// void trim_frequencies
 
 void setup()
 {
@@ -56,6 +65,10 @@ void setup()
     display.fillScreen(ILI9341_BLACK);
 
     AudioMemory(256);
+
+    filter.setLowpass(0, 2400);
+    filter.setHighpass(1, 1000);
+
     queue.begin();
 
     Serial.begin(9600);
@@ -136,16 +149,13 @@ void loop()
     }
 
     // Move latter half of waveform data to beginning.
-    // 50% overlap means no data is lost since already processed frequencies
-    // will be trimmed in the next run while frequencies previously trimmed
+    // 50% overlap means no data is lost since already processed samples
+    // will be trimmed in the next run while samples previously trimmed
     // from the end will now be stable.
     for (int index = 0; index < BUFFER_HALF; index++) {
         waveform_real[index] = waveform_real[index + BUFFER_HALF];
     }
     wf_index = BUFFER_HALF;
-
-
-
 }
 
 uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue)

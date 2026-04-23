@@ -3,6 +3,22 @@
 #include "sstv.h"
 #include "debug.h"
 
+// Hsync detection tolerances
+//
+// These values can be redefined with build flags to ease
+// the tolerances a bit.
+//
+// TODO: Further testing to find which values
+// work best for the analog mic.
+
+#ifndef FREQUENCY_TOLERANCE
+#define HSYNC_FREQUENCY_TOLERANCE 50
+#endif
+
+#ifndef TIMING_TOLERANCE_MS
+#define HSYNC_TIMING_TOLERANCE_MS 0.5
+#endif
+
 // Mode timings in milliseconds
 
 // TODO:
@@ -25,8 +41,12 @@ static const uint32_t MARTIN_M1_COLOR_HIGH_HZ = 2300;
 
 // Tolerance
 
-static const uint32_t FREQUENCY_TOLERANCE = 50;
-static const double TIMING_TOLERANCE_MS = 0.5;
+//static const uint32_t FREQUENCY_TOLERANCE = 50;
+//static const double TIMING_TOLERANCE_MS = 0.5;
+
+// TODO:
+
+
 
 namespace {
 
@@ -59,10 +79,10 @@ bool SSTV::validate_hsync_duration(uint64_t hsync_start, uint64_t hsync_end)
 
     bool is_hsync = is_within_tolerance(pulse_duration_ms,
                                         MARTIN_M1_HSYNC_PULSE_MS,
-                                        TIMING_TOLERANCE_MS);
+                                        HSYNC_TIMING_TOLERANCE_MS);
 
 #if DEBUG_DECODER_STATE
-    Serial.printf("hsync candidate duration: %f --- verdict: %d", pulse_duration_ms, is_hsync);
+    Serial.printf("[PROBE] Hsync candidate duration: %f --- verdict: %d\n", pulse_duration_ms, is_hsync);
 #endif
 
     return is_hsync;
@@ -72,17 +92,13 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
 {
     static bool within_hsync_candidate = false;
 
-#if DEBUG_DECODER_STATE
-    Serial.printf("hsync scan beginning at offset:%d/%d", start_index, frequency_count);
-#endif
-
     for (uint16_t index = start_index; index < frequency_count; index++) {
         double frequency = frequency_data[index];
 
         bool freq_within_hsync_bounds =
             is_within_tolerance(frequency,
                                 MARTIN_M1_HSYNC_HZ,
-                                FREQUENCY_TOLERANCE);
+                                HSYNC_FREQUENCY_TOLERANCE);
 
         if (freq_within_hsync_bounds && !within_hsync_candidate) {
             // ~1200 Hz detected AND not already inside an hsync candidate -> mark
@@ -101,8 +117,11 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
                 m_current_state = SCANLINE_DECODING;
                 m_color_scan_start = m_sample_clock;
 
-                // Debug
-                // Serial.printf("hsync ended at index:%d/%d", index, frequency_count);
+#if DEBUG_DECODER_STATE
+                Serial.printf("\n\n[DETECTED] Found valid hsync -- duration: %d ms\n\n", 
+                              1000 * (m_last_hsync_end - m_last_hsync_start) / m_sample_rate;);
+#endif
+
                 return index+1;
             }
         }
@@ -180,7 +199,7 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 
 #if DEBUG_DECODER_STATE
             uint64_t now = m_sample_clock;
-            Serial.printf("color scan finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+            Serial.printf("color scan finished after %f ms\n", 1000*(now - m_last_hsync_end)/m_sample_rate);
 #endif
 
             current_pixel = 0;
@@ -197,7 +216,7 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                 case RED:
 
 #if DEBUG_DECODER_STATE
-                Serial.printf("scanline finished after %f ms", 1000*(now - m_last_hsync_end)/m_sample_rate);
+                Serial.printf("scanline finished after %f ms\n", 1000*(now - m_last_hsync_end)/m_sample_rate);
 #endif
                 // Swap double buffers
                 Pixel* temp = m_completed_scanline;
