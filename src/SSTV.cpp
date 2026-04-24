@@ -223,9 +223,9 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
             // Current timing system introduces rounding errors, so
             // wait until the next color scan should begin
             uint32_t samples_per_scan = (MARTIN_M1_COLOR_SCAN_MS / 1000) * m_sample_rate;
-            uint32_t color_scan_duration = m_sample_clock - m_color_scan_start;
+            uint32_t curr_scan_duration = m_sample_clock - m_color_scan_start;
 
-            m_num_samples_to_wait = samples_per_scan - color_scan_duration;
+            m_num_samples_to_wait = samples_per_scan - curr_scan_duration;
             m_color_scan_start = m_sample_clock + m_num_samples_to_wait;
 
             m_current_state = WAITING;

@@ -12,10 +12,8 @@ static const int PACKET_SIZE = 128; // size of array returned by readBuffer()
 AudioRecordQueue queue;
 
 #if USB_IN
-
 AudioInputAnalog analog_in;
 AudioConnection analog2queue(analog_in, queue);
-
 #elif MIC_IN
 AudioInputAnalog analog_in(A2);
 AudioFilterBiquad filter;
@@ -36,7 +34,6 @@ SSTV sstv;
 // TFT Display
 static const int TFT_DC = 21;
 static const int TFT_CS = 10;
-
 static const int TFT_HEIGHT = 240;
 static const int TFT_WIDTH = 320;
 
@@ -54,9 +51,7 @@ void setup()
 
     AudioMemory(256);
 
-
 #if MIC_IN
-
     // TODO: Test how this or a bandpass filter affect decoding
     filter.setLowpass(0, 2400);
     filter.setHighpass(1, 1000);
