@@ -8,26 +8,20 @@
 #include "debug.h"
 
 // Audio Capture
-
-
-
-// TODO: use env variable to switch this
-// e.g. ifdef MIDI_AUDIO_SERIAL use usb, otherwise use analog in
-//AudioInputAnalog analog_in;
-//AudioConnection analog2queue(analog_in, queue);
-
-// Number of samples in the buffer returned
-// by the AudioRecordQueue
-static const int PACKET_SIZE = 128;
+static const int PACKET_SIZE = 128; // size of array returned by readBuffer()
 AudioRecordQueue queue;
-//AudioInputUSB usb_in;
-//AudioConnection usb2queue(usb_in, queue);
 
+#if USB_IN
+
+AudioInputAnalog analog_in;
+AudioConnection analog2queue(analog_in, queue);
+
+#elif MIC_IN
 AudioInputAnalog analog_in(A2);
 AudioFilterBiquad filter;
-
 AudioConnection analog2filter(analog_in, filter);
 AudioConnection filter2queue(filter, queue);
+#endif
 
 // Frequency Demodulation
 static const int BUFFER_SIZE = FrequencyDemodulator::BUFFER_SIZE;
@@ -42,33 +36,31 @@ SSTV sstv;
 // TFT Display
 static const int TFT_DC = 21;
 static const int TFT_CS = 10;
-static const int TFT_COPI = 11;
-static const int TFT_SCK = 13;
-
 
 static const int TFT_HEIGHT = 240;
 static const int TFT_WIDTH = 320;
 
-Adafruit_ILI9341 display(TFT_CS, TFT_DC, TFT_COPI, TFT_SCK);
+Adafruit_ILI9341 display(TFT_CS, TFT_DC);
 
 // Util Functions
-
 uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue);
-
-// bool read_packet
-// void trim_frequencies
 
 void setup()
 {
     display.begin();
     display.setRotation(1);
+
     display.fillScreen(ILI9341_BLACK);
 
     AudioMemory(256);
 
+
+#if MIC_IN
+
+    // TODO: Test how this or a bandpass filter affect decoding
     filter.setLowpass(0, 2400);
     filter.setHighpass(1, 1000);
-
+#endif
     queue.begin();
 
     Serial.begin(9600);
@@ -98,13 +90,12 @@ void loop()
     queue.freeBuffer();
 
     if (wf_index != BUFFER_SIZE) {
-        // Buffer not yet full, return early
-        return;
+        return; // Buffer not yet full, return early.
     }
 
 #if DEBUG_WAVEFORM
     for (int index = 0; index < BUFFER_SIZE; index++) {
-        Serial.println(waveform_real[index]);
+        Serial.printf("%lf\n", waveform_real[index]);
     }
 #endif
 
@@ -118,7 +109,7 @@ void loop()
 
 #if DEBUG_FREQUENCY
     for (int index = 0; index < BUFFER_HALF; index++) {
-        Serial.println(trimmed_frequencies[index]);
+        Serial.printf("%lf\n",trimmed_frequencies[index]);
     }
 #endif
 
@@ -143,6 +134,7 @@ void loop()
 #if DEBUG_DECODER_OUTPUT
             Serial.printf("%d,%d,%d\n", pixel.red, pixel.green, pixel.blue);
 #endif
+
         }
 
         y_pos++;

@@ -3,30 +3,31 @@
 #include "sstv.h"
 #include "debug.h"
 
-// Hsync detection tolerances
-//
-// These values can be redefined with build flags to ease
-// the tolerances a bit.
-//
-// TODO: Further testing to find which values
-// work best for the analog mic.
-
-#ifndef FREQUENCY_TOLERANCE
-#define HSYNC_FREQUENCY_TOLERANCE 50
-#endif
-
-#ifndef TIMING_TOLERANCE_MS
-#define HSYNC_TIMING_TOLERANCE_MS 0.5
-#endif
-
-// Mode timings in milliseconds
-
 // TODO:
 // - Include ~30 millisecond pulse that occurs after VIS code
 // - Change millisecond timings to sample timings
 // - Find what's causing scanlines to be occasionally
 // misaligned
+// - Add fallback if hsync isn't detected ~5ms after scanline ends.
+// Requires tracking when the previous color_scan_ended, new field
+// + check in detect_hsync?
 
+// Hsync detection tolerances
+//
+// These values can be redefined with build flags to ease
+// the tolerances a bit.
+//
+// The microphone seems to play nice with a frequency
+// tolerance of 150-200 and timing tolerance of 2.0.
+#ifndef HSYNC_FREQUENCY_TOLERANCE
+#define HSYNC_FREQUENCY_TOLERANCE 50
+#endif
+
+#ifndef HSYNC_TIMING_TOLERANCE_MS
+#define HSYNC_TIMING_TOLERANCE_MS 0.5
+#endif
+
+// Mode timings in milliseconds
 static const double MARTIN_M1_HSYNC_PULSE_MS = 4.862;
 static const double MARTIN_M1_HSYNC_PORCH_MS = 0.572;
 static const double MARTIN_M1_COLOR_SCAN_MS = 146.432;
@@ -38,26 +39,6 @@ static const double MARTIN_M1_MS_PER_PIXEL = 0.4576;
 static const uint32_t MARTIN_M1_HSYNC_HZ = 1200;
 static const uint32_t MARTIN_M1_COLOR_LOW_HZ = 1500;
 static const uint32_t MARTIN_M1_COLOR_HIGH_HZ = 2300;
-
-// Tolerance
-
-//static const uint32_t FREQUENCY_TOLERANCE = 50;
-//static const double TIMING_TOLERANCE_MS = 0.5;
-
-// TODO:
-
-
-
-namespace {
-
-bool is_within_tolerance(double value, double target, double tolerance)
-{
-    double upper_bound = target + tolerance;
-    double lower_bound = target - tolerance;
-    return (value >= lower_bound) && (value <= upper_bound);
-}
-
-}
 
 SSTV::SSTV(uint32_t sample_rate) :
     m_sample_rate(sample_rate),
@@ -72,6 +53,14 @@ SSTV::SSTV(uint32_t sample_rate) :
     m_completed_scanline(new Pixel[MARTIN_M1_SCANLINE_WIDTH]),
     m_scanline_in_progress(new Pixel[MARTIN_M1_SCANLINE_WIDTH])
 {}
+
+
+bool SSTV::is_within_tolerance(double value, double target, double tolerance)
+{
+    double upper_bound = target + tolerance;
+    double lower_bound = target - tolerance;
+    return (value >= lower_bound) && (value <= upper_bound);
+}
 
 bool SSTV::validate_hsync_duration(uint64_t hsync_start, uint64_t hsync_end)
 {
@@ -119,7 +108,7 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
 
 #if DEBUG_DECODER_STATE
                 Serial.printf("\n\n[DETECTED] Found valid hsync -- duration: %d ms\n\n", 
-                              1000 * (m_last_hsync_end - m_last_hsync_start) / m_sample_rate;);
+                              1000 * (m_last_hsync_end - m_last_hsync_start) / m_sample_rate);
 #endif
 
                 return index+1;
@@ -150,12 +139,12 @@ uint8_t SSTV::convert_frequency_to_intensity(double frequency)
 
 uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
 {
+    static const uint16_t samples_per_pixel =
+        (MARTIN_M1_MS_PER_PIXEL / 1000) * m_sample_rate;
+
     enum ColorScanState { GREEN = 1, BLUE = 2, RED = 3 };
     static ColorScanState current_scan = GREEN;
 
-    static const uint16_t samples_per_pixel = (MARTIN_M1_MS_PER_PIXEL / 1000) * m_sample_rate;
-
-    // x position of the pixel whose color channel is currently being read
     static uint16_t current_pixel = 0;
 
     static uint16_t samples_read = 0;
@@ -194,7 +183,6 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
         frequency_sum = 0;
 
         current_pixel++;
-
         if (current_pixel == 320) {
 
 #if DEBUG_DECODER_STATE
@@ -218,7 +206,8 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 #if DEBUG_DECODER_STATE
                 Serial.printf("scanline finished after %f ms\n", 1000*(now - m_last_hsync_end)/m_sample_rate);
 #endif
-                // Swap double buffers
+
+                // Swap buffers
                 Pixel* temp = m_completed_scanline;
                 m_completed_scanline = m_scanline_in_progress;
                 m_scanline_in_progress = temp;
