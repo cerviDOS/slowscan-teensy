@@ -3,7 +3,6 @@
 
 #include "FrequencyDemodulator.h"
 
-
 FrequencyDemodulator::FrequencyDemodulator(uint32_t sample_rate) :
     m_sample_rate(sample_rate)
 {
@@ -23,6 +22,10 @@ void FrequencyDemodulator::analytic_signal(double real[BUFFER_SIZE], double imag
     }
 
     fft.compute(FFTDirection::Forward);
+
+    // Thank you DSP StackExchange user Cesar, who
+    // disappeared prompty after this explanation.
+    // https://dsp.stackexchange.com/a/63772
 
     const uint16_t nyquist = BUFFER_SIZE / 2;
     // Zero out bins at 0 & Nyquist
@@ -45,6 +48,8 @@ void FrequencyDemodulator::analytic_signal(double real[BUFFER_SIZE], double imag
 
 double FrequencyDemodulator::recover_phase(double I, double Q)
 {
+    // Not like the teensy is hurting for cpu cycles, but
+    // any way to avoid this calc?
     return atan2(I, Q);
 }
 
@@ -75,24 +80,7 @@ void FrequencyDemodulator::frequencies(const double waveform_data[BUFFER_SIZE], 
 
     analytic_signal(real, imag);
 
-    for (int index = 0; index < BUFFER_SIZE-1; index++) {
-        /*
-        // TODO: encapsulate wrapping method in its own function
-        double phase1 =
-            (atan2(imag[index], real[index]) / M_PI) * INT16_MAX;
-
-        double phase2 =
-            (atan2(imag[index+1], real[index+1]) / M_PI) * INT16_MAX;
-
-        int16_t phase_diff_int16 = (int) phase2 - phase1;
-
-        double phase_diff = phase_diff_int16 / (double) INT16_MAX;
-
-        double frequency = (phase_diff / 2) * m_sample_rate;
-
-        frequency_data[index] = frequency;
-        */
-
+    for (int index = 0; index < BUFFER_SIZE-1; index++) { 
         frequency_data[index] = 
             instantaneous_frequency(real[index], imag[index],
                                     real[index+1], imag[index+1]);
