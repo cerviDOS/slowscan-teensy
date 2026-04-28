@@ -10,6 +10,11 @@ Teensy 4.x
 
 [Electret Microphone with Amplifier](https://www.adafruit.com/product/1713)
 
+## Wiring
+
+<img width="1500" height="1125" alt="Embedded Final Wiring Diagram" src="https://github.com/user-attachments/assets/d921f3d8-a60d-4883-b007-5f4179c48983" />
+
+
 ## Uploading Firmware
 
 This project offers several environments:
