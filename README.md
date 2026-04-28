@@ -1,6 +1,8 @@
 # SLOW_SCAN
 slowscan-teensy is an SSTV decoder project for the Teensy 4.x.
 
+<img width="1500" height="957" alt="mu-scan" src="https://github.com/user-attachments/assets/37d7bfba-863d-4ca4-a8a5-f91c49410bfc" />
+
 The decoder currently only supports Martin M1, though more modes may be implemented in the future.
 
 ## Components
