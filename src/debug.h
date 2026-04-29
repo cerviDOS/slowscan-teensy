@@ -11,12 +11,12 @@
 #define DEBUG_FREQUENCY 0
 #endif
 
-#ifndef DEBUG_DECODER_OUTPUT
-#define DEBUG_DECODER 0
-#endif
-
 #ifndef DEBUG_DECODER_STATE
 #define DEBUG_DECODER_STATE 0
+#endif
+
+#ifndef DEBUG_DECODER_OUTPUT
+#define DEBUG_DECODER_OUTPUT 1
 #endif
 
 #endif

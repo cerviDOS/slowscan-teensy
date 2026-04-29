@@ -19,16 +19,22 @@ Teensy 4.x
 
 ## Uploading Firmware
 
-This project offers several environments:
+This project offers two build environments:
 
 | Environment | Description |
 |-------------|-------------|
-| release-analog-in | Decoder reads analog audio input from the microphone attached to pin A2 |
-| release-usb-in | Decoder reads audio input from the host device attached via USB |
-| debug_waveform | Enables serial output of the waveform read in from the microphone | 
-| debug_frequency | Enables serial output of the frequencies calculated from the waveform |
-| debug_decoder_state | Enables debug messages for the decoder's state machine |
-| debug_decoder_output | Enables serial output of the RGB data detected by the decoder. This output can be interpreted into an image live by redirecting the serial monitor output to a file and passing the file name to image.py in the scripts folder. |
+| mic-in | Read audio input from the microphone attached to pin A2 |
+| usb-in | Read audio input from the host device attached via USB |
+
+Debug outputs may be enabled by editing debug.h:
+
+| Flag | Description |
+|------|-------------|
+| DEBUG_WAVEFORM | Enables serial output of the waveform read in from the selected input source |
+| DEBUG_FREQUENCY | Enables serial output of the frequencies computed from the audio input |
+| DEBUG_DECODER_STATE | Enables debug messages for the decoder's state machine |
+| DEBUG_DECODER_OUTPUT | Enables serial output of the RGB data detected by the decoder. This output
+can be interpreted into an image live by redirecting the serial monitor output to a file and passing the file name to image.py in the scripts folder. |
 
 I prefer the PlatformIO CLI, so I use the command below for uploading the firmware:
 
