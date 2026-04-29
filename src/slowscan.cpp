@@ -12,12 +12,14 @@ static const int PACKET_SIZE = 128; // size of array returned by readBuffer()
 AudioRecordQueue queue;
 
 #if USB_IN
-AudioInputAnalog analog_in;
-AudioConnection analog2queue(analog_in, queue);
+AudioInputUSB usb_in;
+AudioConnection usb2queue(usb_in, queue);
 #elif MIC_IN
 AudioInputAnalog analog_in(A2);
+
 AudioFilterBiquad filter;
 AudioConnection analog2filter(analog_in, filter);
+
 AudioConnection filter2queue(filter, queue);
 #endif
 
@@ -44,6 +46,8 @@ uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue);
 
 void setup()
 {
+    Serial.begin(9600);
+ 
     display.begin();
     display.setRotation(1);
 
@@ -56,9 +60,8 @@ void setup()
     filter.setLowpass(0, 2400);
     filter.setHighpass(1, 1000);
 #endif
-    queue.begin();
 
-    Serial.begin(9600);
+    queue.begin();
 }
 
 void loop()
@@ -90,9 +93,10 @@ void loop()
 
 #if DEBUG_WAVEFORM
     for (int index = 0; index < BUFFER_SIZE; index++) {
-        Serial.printf("%lf\n", waveform_real[index]);
+        Serial.println(waveform_real[index]);
     }
 #endif
+
 
     freq.frequencies(waveform_real, frequencies);
 
@@ -100,13 +104,12 @@ void loop()
     double trimmed_frequencies[BUFFER_HALF];
     for (int index = 0; index < BUFFER_HALF; index++) {
         trimmed_frequencies[index] = frequencies[index+TRIM_OFFSET];
-    }
 
 #if DEBUG_FREQUENCY
-    for (int index = 0; index < BUFFER_HALF; index++) {
-        Serial.printf("%lf\n",trimmed_frequencies[index]);
-    }
+        Serial.println(trimmed_frequencies[index]);
 #endif
+
+    }
 
     bool scanline_ready = sstv.process_frequencies(trimmed_frequencies,
                                                    BUFFER_HALF);
@@ -114,6 +117,7 @@ void loop()
     // NOTE: Currently halts entirely once 240 scanlines are read.
     // Maybe add a button for reset?
     static int y_pos = 0;
+
     if (scanline_ready && y_pos < TFT_HEIGHT) {
 
         sstv.retrieve_scanline(scanline_data);
@@ -127,7 +131,11 @@ void loop()
             display.drawPixel(x_pos, y_pos, tft_color);
 
 #if DEBUG_DECODER_OUTPUT
-            Serial.printf("%d,%d,%d\n", pixel.red, pixel.green, pixel.blue);
+            Serial.print(pixel.red);
+            Serial.print(",");
+            Serial.print(pixel.green);
+            Serial.print(",");
+            Serial.println(pixel.blue);
 #endif
 
         }

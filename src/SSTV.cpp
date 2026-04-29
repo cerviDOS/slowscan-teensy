@@ -6,11 +6,8 @@
 // TODO:
 // - Include ~30 millisecond pulse that occurs after VIS code
 // - Change millisecond timings to sample timings
-// - Find what's causing scanlines to be occasionally
-// misaligned
 // - Add fallback if hsync isn't detected ~5ms after scanline ends.
-// Requires tracking when the previous color_scan_ended, new field
-// + check in detect_hsync?
+// Requires tracking when the previous color_scan_ended, new field + check in detect_hsync?
 
 // Hsync detection tolerances
 //
@@ -35,14 +32,12 @@ static const double MARTIN_M1_COLOR_SEPARATOR_MS = 0.572;
 static const double MARTIN_M1_MS_PER_PIXEL = 0.4576;
 
 // Mode frequencies in Hz
-
 static const uint32_t MARTIN_M1_HSYNC_HZ = 1200;
 static const uint32_t MARTIN_M1_COLOR_LOW_HZ = 1500;
 static const uint32_t MARTIN_M1_COLOR_HIGH_HZ = 2300;
 
 SSTV::SSTV(uint32_t sample_rate) :
     m_sample_rate(sample_rate),
-    m_num_scanlines_processed(0),
     m_sample_clock(0),
     m_last_hsync_start(0),
     m_last_hsync_end(0),
@@ -71,7 +66,9 @@ bool SSTV::validate_hsync_duration(uint64_t hsync_start, uint64_t hsync_end)
                                         HSYNC_TIMING_TOLERANCE_MS);
 
 #if DEBUG_DECODER_STATE
-    Serial.printf("[PROBE] Hsync candidate duration: %f --- verdict: %d\n", pulse_duration_ms, is_hsync);
+    Serial.print("[HSYNC] H-sync candidate duration: ");
+    Serial.print(pulse_duration_ms);
+    Serial.println(" ms");
 #endif
 
     return is_hsync;
@@ -102,14 +99,15 @@ uint16_t SSTV::detect_hsync(double frequency_data[], uint16_t frequency_count, u
             within_hsync_candidate = false;
 
             if (validate_hsync_duration(m_last_hsync_start, m_last_hsync_end)) {
+#if DEBUG_DECODER_STATE
+                Serial.print("\n[HSYNC] Found valid hsync, duration: ");
+                Serial.print( 1000.0 * (m_last_hsync_end - m_last_hsync_start) / m_sample_rate);
+                Serial.println("ms\n");
+#endif
+
                 // Candidate is indeed an hsync, begin decoding scanline
                 m_current_state = SCANLINE_DECODING;
                 m_color_scan_start = m_sample_clock;
-
-#if DEBUG_DECODER_STATE
-                Serial.printf("\n\n[DETECTED] Found valid hsync -- duration: %d ms\n\n", 
-                              1000 * (m_last_hsync_end - m_last_hsync_start) / m_sample_rate);
-#endif
 
                 return index+1;
             }
@@ -139,6 +137,7 @@ uint8_t SSTV::convert_frequency_to_intensity(double frequency)
 
 uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
 {
+
     static const uint16_t samples_per_pixel =
         (MARTIN_M1_MS_PER_PIXEL / 1000) * m_sample_rate;
 
@@ -152,6 +151,7 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 
     for (int index = start_index; index < frequency_count; index++) {
         m_sample_clock++;
+
         samples_read++;
 
         frequency_sum += frequency_data[index];
@@ -166,6 +166,7 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
         uint8_t color_intensity =
             convert_frequency_to_intensity(avg_frequecy);
 
+
         switch (current_scan) {
             case GREEN:
                 m_scanline_in_progress[current_pixel].green = color_intensity;
@@ -178,19 +179,20 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                 break;
         }
 
-        // Reset in preparation for new pixel.
+        // Reset in preparation for new pixel
         samples_read = 0;
         frequency_sum = 0;
 
-        current_pixel++;
-        if (current_pixel == 320) {
+        if (current_pixel++ == 320) {
+            current_pixel = 0;
 
 #if DEBUG_DECODER_STATE
             uint64_t now = m_sample_clock;
-            Serial.printf("color scan finished after %f ms\n", 1000*(now - m_last_hsync_end)/m_sample_rate);
-#endif
 
-            current_pixel = 0;
+            Serial.print("[CSAN] Finished channel after: ");
+            Serial.print(1000.0 *(now - m_last_hsync_end)/m_sample_rate);
+            Serial.println(" ms");
+#endif
 
             // Color scan finished, move to next color channel
             // or return to hsync detection.
@@ -204,7 +206,9 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                 case RED:
 
 #if DEBUG_DECODER_STATE
-                Serial.printf("scanline finished after %f ms\n", 1000*(now - m_last_hsync_end)/m_sample_rate);
+                Serial.print("[CSAN] Finished scanline after: ");
+                Serial.print(1000.0 * (now - m_last_hsync_end) /m_sample_rate);
+                Serial.println(" ms\n");
 #endif
 
                 // Swap buffers
@@ -217,15 +221,18 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
                 m_current_state = HSYNC_DETECTION;
                 current_scan = GREEN;
 
+                //m_last_scanline_end = m_sample_clock;
+
                 return index+1;
             }
 
             // Current timing system introduces rounding errors, so
-            // wait until the next color scan should begin
+            // wait until the next color scan *should* begin
             uint32_t samples_per_scan = (MARTIN_M1_COLOR_SCAN_MS / 1000) * m_sample_rate;
             uint32_t curr_scan_duration = m_sample_clock - m_color_scan_start;
 
             m_num_samples_to_wait = samples_per_scan - curr_scan_duration;
+
             m_color_scan_start = m_sample_clock + m_num_samples_to_wait;
 
             m_current_state = WAITING;
@@ -240,14 +247,27 @@ uint16_t SSTV::decode_color_scan(double frequency_data[], uint16_t frequency_cou
 uint16_t SSTV::wait(double frequency_data[], uint16_t frequency_count, uint16_t start_index)
 {
     static uint16_t samples_elapsed = 0;
-    for (int index = start_index; index < frequency_count; index++) {
-        samples_elapsed++;
-        if (samples_elapsed == m_num_samples_to_wait) {
-            samples_elapsed = 0;
 
+#if DEBUG_DECODER_STATE
+    Serial.print("[WAIT] Waiting ");
+    Serial.print(m_num_samples_to_wait);
+    Serial.print(" samples / ");
+    Serial.print(1000.0 * ((float) m_num_samples_to_wait / m_sample_rate));
+    Serial.println(" ms");
+
+#endif
+
+    for (int index = start_index; index < frequency_count; index++) {
+        // Don't update the sample clock here since this function
+        // is used to throw away samples instead of processing them
+
+        if (samples_elapsed++ == m_num_samples_to_wait) {
+            samples_elapsed = 0;
+            m_num_samples_to_wait = 0;
+
+            // TODO:
             // Change to m_state_after_wait at some point.
-            // More book keeping but should be useful for decoding
-            // other modes.
+            // More book keeping but should be useful for decoding other modes.
             m_current_state = SCANLINE_DECODING;
 
             return index+1;
@@ -262,7 +282,6 @@ bool SSTV::process_frequencies(double frequency_data[], uint16_t frequency_count
 
     uint16_t leftover_index = 0;
     do {
-
         switch(m_current_state) {
             default:
             case HSYNC_DETECTION:

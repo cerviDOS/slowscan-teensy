@@ -36,6 +36,7 @@ public:
 private:
 
     // Helpers
+
     bool is_within_tolerance(double value, double target, double tolerance);
     bool validate_hsync_duration(uint64_t start, uint64_t end);
     uint8_t convert_frequency_to_intensity(double frequency);
@@ -49,7 +50,6 @@ private:
     uint16_t wait(double frequency_data[], uint16_t frequency_count, uint16_t start_index);
 
     uint32_t m_sample_rate;
-    uint32_t m_num_scanlines_processed;
 
     uint64_t m_sample_clock; // tracks number of samples processed thus far
 
@@ -58,14 +58,16 @@ private:
 
     uint64_t m_color_scan_start;
 
+    //uint64_t m_last_scanline_end; // unused for now
+
     enum State {HSYNC_DETECTION, SCANLINE_DECODING, WAITING};
     State m_current_state;
 
     uint16_t m_num_samples_to_wait; // num of samples for wait() to toss away
-    State m_state_after_wait; // unused for now
+    // State m_state_after_wait; // unused for now, useful for other modes in the future
 
     // TODO: encapsulate wait
-    void wait_samples(uint16_t num_samples, State state_after);
+    // void configure_wait(uint16_t num_samples, State state_after);
 
     bool m_new_scanline_ready;
     Pixel* m_completed_scanline;

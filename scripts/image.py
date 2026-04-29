@@ -22,10 +22,11 @@ y = 0
 
 img = np.zeros([height, width, 3], dtype=np.uint8)
 while True:
+    print("Waiting for next scanline...")
     while io.poll(1):
         split = teensy_output.stdout.readline() \
             .decode() \
-            .replace('\n', '') \
+            .replace('\r\n', '') \
             .split(',', maxsplit=3)
 
         ignore_line = False
