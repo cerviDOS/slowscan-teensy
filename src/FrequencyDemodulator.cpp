@@ -56,12 +56,15 @@ double FrequencyDemodulator::recover_phase(double I, double Q)
 double FrequencyDemodulator::instantaneous_frequency(double real1, double imag1,
                                                      double real2, double imag2)
 {
+   
     double phase1 =
         (atan2(imag1, real1) / M_PI) * INT16_MAX;
 
     double phase2 =
         (atan2(imag2, real2) / M_PI) * INT16_MAX;
 
+    // Phase unwrapping using integer overflows, neat!
+    // https://www.site2241.net/march2025.htm
     int16_t phase_diff_int16 = (int) phase2 - phase1;
 
     double phase_diff = phase_diff_int16 / (double) INT16_MAX;
